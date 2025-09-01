@@ -5,6 +5,7 @@ members = [
     "crates/cdn",
     "crates/connections",
     "crates/gateway",
+    "crates/events",
     "crates/util/config",
     "crates/util/db",
     "crates/webrtc",
