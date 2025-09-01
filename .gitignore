@@ -1,5 +1,7 @@
 **/.DS_STORE
 db/
+!crates/util/db/
+!crates/util/db/**
 dist/
 node_modules
 database.db
