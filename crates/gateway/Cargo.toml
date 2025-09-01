@@ -4,3 +4,10 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
+anyhow = "1"
+axum = { version = "0.7", features = ["ws"] }
+tokio = { version = "1", features = ["macros", "rt-multi-thread", "signal"] }
+futures-util = "0.3"
+config = { path = "../util/config" }
+util-db = { path = "../util/db" }
+events = { path = "../events" }
