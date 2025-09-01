@@ -1,0 +1,11 @@
+[workspace]
+members = [
+    "crates/api",
+    "crates/bundle",
+    "crates/cdn",
+    "crates/connections",
+    "crates/gateway",
+    "crates/util",
+    "crates/webrtc",
+]
+resolver = "2"

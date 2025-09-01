@@ -32,6 +32,20 @@ And with documentation on how to set up your own server [here](https://docs.spac
 
 ## [Contributing](https://docs.spacebar.chat/contributing/)
 
+## Building
+
+To build the project for Linux:
+
+```bash
+cargo build --target x86_64-unknown-linux-gnu
+```
+
+To build the project for Windows:
+
+```bash
+cargo build --target x86_64-pc-windows-msvc
+```
+
 ## Clients
 
 You _should_ be able to use any client designed for Discord.com to connect to a Spacebar instance.  
