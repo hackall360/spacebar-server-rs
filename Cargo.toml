@@ -6,6 +6,7 @@ members = [
     "crates/connections",
     "crates/gateway",
     "crates/util/config",
+    "crates/util/db",
     "crates/webrtc",
 ]
 resolver = "2"
