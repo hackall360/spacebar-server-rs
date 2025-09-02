@@ -8,6 +8,7 @@ members = [
     "crates/events",
     "crates/util/config",
     "crates/util/db",
+    "crates/util/util",
     "crates/webrtc",
 ]
 resolver = "2"
