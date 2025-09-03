@@ -7,7 +7,6 @@
 		"postinstall": "npx patch-package",
 		"start": "node dist/bundle/start.js",
 		"start:api": "node dist/api/start.js",
-		"start:cdn": "node dist/cdn/start.js",
 		"build": "tsc -p .",
 		"watch": "tsc -w -p .",
 		"test": "node scripts/test.js",
@@ -116,7 +115,6 @@
 	},
 	"_moduleAliases": {
 		"@spacebar/api": "dist/api",
-		"@spacebar/cdn": "dist/cdn",
 		"@spacebar/gateway": "dist/gateway",
 		"@spacebar/util": "dist/util",
 		"@spacebar/webrtc": "dist/webrtc"
