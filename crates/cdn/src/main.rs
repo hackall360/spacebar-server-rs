@@ -1,10 +1,6 @@
 //! CDN service for serving static assets.
 
-use std::{
-    net::SocketAddr,
-    path::{Path, PathBuf},
-    sync::Arc,
-};
+use std::{net::SocketAddr, path::Path, sync::Arc};
 
 use anyhow::Result;
 use axum::{
@@ -15,7 +11,7 @@ use axum::{
     Router,
 };
 use config::Config;
-use tokio::{fs, net::TcpListener, signal};
+use tokio::{net::TcpListener, signal};
 use tower::ServiceBuilder;
 use tower_http::{
     cors::{Any, CorsLayer},
@@ -24,10 +20,15 @@ use tower_http::{
 
 use util_db::{init_database, DbPool};
 
+mod routes;
+mod signature;
+mod storage;
+
 /// Shared application state.
 #[derive(Clone)]
-struct AppState {
-    storage_root: Arc<PathBuf>,
+pub struct AppState {
+    pub storage: storage::ArcStorage,
+    pub config: Arc<Config>,
 }
 
 #[tokio::main]
@@ -35,18 +36,20 @@ async fn main() -> Result<()> {
     tracing_subscriber::fmt::init();
 
     // Load configuration and database.
-    let _config = Config::init().await;
+    let config = Config::init().await;
     let database_url = std::env::var("DATABASE_URL").unwrap_or_else(|_| "sqlite::memory:".into());
     let db = init_database(&database_url).await?;
 
     // Run clean-up for any stale attachment signatures.
     cleanup_attachment_signatures(&db).await.ok();
 
-    // Determine storage location for files.
-    let storage_root = std::env::var("STORAGE_LOCATION").unwrap_or_else(|_| "files".to_string());
-    let storage_root = Arc::new(PathBuf::from(storage_root));
+    // Determine storage backend.
+    let storage = storage::build_storage().await?;
 
-    let state = AppState { storage_root };
+    let state = AppState {
+        storage,
+        config: config.clone(),
+    };
 
     // Build application with routes and middleware.
     let mut app = Router::new()
@@ -57,6 +60,7 @@ async fn main() -> Result<()> {
             "/guilds/:guild_id/users/:user_id/avatars",
             guild_profile_router(),
         )
+        .nest("/attachments", routes::attachments_router())
         .with_state(state)
         .layer(
             ServiceBuilder::new()
@@ -113,8 +117,8 @@ async fn get_simple_file(
     matched: MatchedPath,
 ) -> Result<Response, StatusCode> {
     let route = route_base(matched.as_str())?;
-    let path = state.storage_root.join(route).join(id);
-    serve_path(&path).await
+    let path = format!("{}/{}", route, id);
+    serve_path(&*state.storage, &path).await
 }
 
 /// Serve a file under `<storage>/<route>/<id>/<hash>`.
@@ -124,8 +128,8 @@ async fn get_nested_file(
     matched: MatchedPath,
 ) -> Result<Response, StatusCode> {
     let route = route_base(matched.as_str())?;
-    let path = state.storage_root.join(route).join(id).join(hash);
-    serve_path(&path).await
+    let path = format!("{}/{}/{}", route, id, hash);
+    serve_path(&*state.storage, &path).await
 }
 
 /// Serve the avatar stored for a guild member without specifying a hash.
@@ -133,14 +137,8 @@ async fn get_guild_profile_root(
     AxumPath((guild_id, user_id)): AxumPath<(String, String)>,
     State(state): State<AppState>,
 ) -> Result<Response, StatusCode> {
-    let path = state
-        .storage_root
-        .join("guilds")
-        .join(guild_id)
-        .join("users")
-        .join(user_id)
-        .join("avatars");
-    serve_path(&path).await
+    let path = format!("guilds/{}/users/{}/avatars", guild_id, user_id);
+    serve_path(&*state.storage, &path).await
 }
 
 /// Serve a specific guild profile avatar hash.
@@ -148,15 +146,8 @@ async fn get_guild_profile_file(
     AxumPath((guild_id, user_id, hash)): AxumPath<(String, String, String)>,
     State(state): State<AppState>,
 ) -> Result<Response, StatusCode> {
-    let path = state
-        .storage_root
-        .join("guilds")
-        .join(guild_id)
-        .join("users")
-        .join(user_id)
-        .join("avatars")
-        .join(hash);
-    serve_path(&path).await
+    let path = format!("guilds/{}/users/{}/avatars/{}", guild_id, user_id, hash);
+    serve_path(&*state.storage, &path).await
 }
 
 /// Utility to derive the first component of the matched route path.
@@ -168,10 +159,10 @@ fn route_base(path: &str) -> Result<&str, StatusCode> {
 }
 
 /// Read a file from disk and return it as a response with appropriate headers.
-async fn serve_path(path: &Path) -> Result<Response, StatusCode> {
-    match fs::read(path).await {
-        Ok(contents) => {
-            let mime = mime_guess::from_path(path).first_or_octet_stream();
+async fn serve_path(storage: &dyn storage::Storage, path: &str) -> Result<Response, StatusCode> {
+    match storage.get(path).await {
+        Ok(Some(contents)) => {
+            let mime = mime_guess::from_path(Path::new(path)).first_or_octet_stream();
             let res = Response::builder()
                 .status(StatusCode::OK)
                 .header(header::CACHE_CONTROL, "public, max-age=31536000")
@@ -180,7 +171,8 @@ async fn serve_path(path: &Path) -> Result<Response, StatusCode> {
                 .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
             Ok(res)
         }
-        Err(_) => Err(StatusCode::NOT_FOUND),
+        Ok(None) => Err(StatusCode::NOT_FOUND),
+        Err(_) => Err(StatusCode::INTERNAL_SERVER_ERROR),
     }
 }
 

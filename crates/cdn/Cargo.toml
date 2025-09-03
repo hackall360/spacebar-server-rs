@@ -5,7 +5,7 @@ edition = "2021"
 
 [dependencies]
 anyhow = "1"
-axum = { version = "0.7", features = ["macros"] }
+axum = { version = "0.7", features = ["macros", "multipart"] }
 tokio = { version = "1", features = ["macros", "rt-multi-thread", "signal", "fs"] }
 tower = "0.4"
 tower-http = { version = "0.5", features = ["cors", "trace"] }
@@ -14,3 +14,18 @@ mime_guess = "2"
 config = { path = "../util/config" }
 util-db = { path = "../util/db" }
 sqlx = { version = "0.7", default-features = false, features = ["runtime-tokio-rustls", "macros", "mysql", "postgres", "sqlite", "any"] }
+async-trait = "0.1"
+hmac = "0.12"
+sha2 = "0.10"
+hex = "0.4"
+subtle = "2"
+infer = "0.15"
+imagesize = "0.10"
+uuid = { version = "1", features = ["v4"] }
+sanitize-filename = "0.5"
+aws-config = { version = "1", optional = true }
+aws-sdk-s3 = { version = "1", optional = true, default-features = false, features = ["rustls"] }
+serde = { version = "1", features = ["derive"] }
+
+[features]
+s3 = ["aws-config", "aws-sdk-s3"]
