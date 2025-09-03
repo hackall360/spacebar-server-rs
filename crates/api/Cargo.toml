@@ -15,3 +15,4 @@ util-db = { path = "../util/db" }
 events = { path = "../events" }
 sentry = { version = "0.42", features = ["tokio"] }
 sentry-tower = { version = "0.42", features = ["http"] }
+dotenvy = "0.15"

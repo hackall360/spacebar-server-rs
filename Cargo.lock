@@ -284,6 +284,7 @@ dependencies = [
  "anyhow",
  "axum",
  "config",
+ "dotenvy",
  "events",
  "sentry",
  "sentry-tower",
