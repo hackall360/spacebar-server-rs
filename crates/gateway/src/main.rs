@@ -1,10 +1,10 @@
-use std::{collections::HashSet, net::SocketAddr, sync::Arc};
+use std::{collections::HashMap, net::SocketAddr, sync::Arc};
 
 use anyhow::Result;
 use axum::{
     extract::{
-        ws::{Message, WebSocket, WebSocketUpgrade},
-        ConnectInfo, State,
+        ws::WebSocketUpgrade,
+        ConnectInfo, Query, State,
     },
     response::Response,
     routing::get,
@@ -19,11 +19,29 @@ use tokio::{
 };
 use util_db::{close_database, init_database, DbPool};
 
+mod connection;
+mod error;
+mod opcodes;
+
+use connection::handle_socket;
+
 #[derive(Clone)]
-struct GatewayState {
-    db: DbPool,
-    config: Arc<Config>,
-    connections: Arc<Mutex<HashSet<SocketAddr>>>,
+pub struct GatewayState {
+    pub db: DbPool,
+    pub config: Arc<Config>,
+    pub connections: Arc<Mutex<HashMap<SocketAddr, ConnectionInfo>>>,
+}
+
+#[derive(Clone)]
+pub struct ConnectionInfo {
+    pub session_id: String,
+    pub shard: Option<ShardInfo>,
+}
+
+#[derive(Clone)]
+pub struct ShardInfo {
+    pub id: u16,
+    pub count: u16,
 }
 
 pub struct GatewayServer {
@@ -35,12 +53,7 @@ pub struct GatewayServer {
 
 impl GatewayServer {
     pub fn new(port: u16) -> Self {
-        Self {
-            port,
-            state: None,
-            shutdown: None,
-            handle: None,
-        }
+        Self { port, state: None, shutdown: None, handle: None }
     }
 
     pub async fn start(&mut self) -> Result<()> {
@@ -53,7 +66,7 @@ impl GatewayServer {
         let state = GatewayState {
             db,
             config,
-            connections: Arc::new(Mutex::new(HashSet::new())),
+            connections: Arc::new(Mutex::new(HashMap::new())),
         };
         self.state = Some(state.clone());
 
@@ -68,7 +81,7 @@ impl GatewayServer {
             listener,
             app.into_make_service_with_connect_info::<SocketAddr>(),
         )
-        .with_graceful_shutdown(async {
+        .with_graceful_shutdown(async move {
             let _ = rx.await;
         });
 
@@ -97,24 +110,9 @@ async fn ws_handler(
     ws: WebSocketUpgrade,
     ConnectInfo(addr): ConnectInfo<SocketAddr>,
     State(state): State<GatewayState>,
+    Query(query): Query<HashMap<String, String>>,
 ) -> Response {
-    ws.on_upgrade(move |socket| handle_socket(socket, addr, state))
-}
-
-async fn handle_socket(mut socket: WebSocket, addr: SocketAddr, state: GatewayState) {
-    state.connections.lock().await.insert(addr);
-    let total = state.connections.lock().await.len();
-    println!("[Gateway] New connection from {}, total {}", addr, total);
-
-    while let Some(Ok(msg)) = socket.recv().await {
-        if let Message::Close(_) = msg {
-            break;
-        }
-    }
-
-    state.connections.lock().await.remove(&addr);
-    let total = state.connections.lock().await.len();
-    println!("[Gateway] Connection closed from {}, total {}", addr, total);
+    ws.on_upgrade(move |socket| handle_socket(socket, addr, query, state))
 }
 
 #[tokio::main]
