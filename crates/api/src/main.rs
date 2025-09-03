@@ -14,6 +14,7 @@ use events::init_event;
 use util_db::{init_database, DbPool};
 
 mod middleware;
+mod models;
 mod routes;
 
 /// Shared application state.
@@ -59,6 +60,7 @@ impl SpacebarServer {
             .with_state(state)
             .layer(from_fn(middleware::cors))
             .layer(from_fn(middleware::translation))
+            .layer(from_fn(middleware::authentication))
             .layer(ConcurrencyLimitLayer::new(100))
             .layer(NewSentryLayer::new_from_top())
             .layer(SentryHttpLayer::new().enable_transaction());
