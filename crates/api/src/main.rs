@@ -1,10 +1,11 @@
 //! API service entry point using Axum.
 
-use std::{net::SocketAddr, sync::Arc};
+use std::{net::SocketAddr, sync::Arc, thread::available_parallelism};
 
 use anyhow::Result;
 use axum::{middleware::from_fn, serve};
 use config::Config;
+use dotenvy::dotenv;
 use sentry_tower::{NewSentryLayer, SentryHttpLayer};
 use tokio::{net::TcpListener, signal};
 use tower::limit::ConcurrencyLimitLayer;
@@ -63,7 +64,11 @@ impl SpacebarServer {
             .layer(SentryHttpLayer::new().enable_transaction());
 
         // Start HTTP server
-        let addr: SocketAddr = "0.0.0.0:3000".parse().unwrap();
+        let port: u16 = std::env::var("PORT")
+            .ok()
+            .and_then(|p| p.parse().ok())
+            .unwrap_or(3001);
+        let addr = SocketAddr::from(([0, 0, 0, 0], port));
         let listener = TcpListener::bind(addr).await?;
         serve(
             listener,
@@ -80,7 +85,31 @@ async fn shutdown_signal() {
     let _ = signal::ctrl_c().await;
 }
 
-#[tokio::main]
-async fn main() -> Result<()> {
-    SpacebarServer::start().await
+fn main() {
+    if let Err(err) = run() {
+        eprintln!("{err:?}");
+    }
+}
+
+fn run() -> Result<()> {
+    dotenv().ok();
+
+    let threads = std::env::var("THREADS")
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or_else(|| {
+            available_parallelism()
+                .map(|n| n.get())
+                .unwrap_or_else(|_| {
+                    eprintln!("[API] Failed to get thread count! Using 1...");
+                    1
+                })
+        });
+
+    let runtime = tokio::runtime::Builder::new_multi_thread()
+        .worker_threads(threads)
+        .enable_all()
+        .build()?;
+
+    runtime.block_on(async { SpacebarServer::start().await })
 }
