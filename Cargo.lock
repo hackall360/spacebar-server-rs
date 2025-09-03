@@ -1357,8 +1357,12 @@ dependencies = [
  "config",
  "events",
  "futures-util",
+ "serde",
+ "serde_json",
+ "thiserror 1.0.69",
  "tokio",
  "util-db",
+ "uuid",
 ]
 
 [[package]]
